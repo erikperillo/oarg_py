@@ -85,7 +85,8 @@ def parse(argv=sys.argv):
      #main loop
      for oarg in Container.oargs:
           mark = None
-          for arg in argv:
+          deleted = False
+          for i,arg in enumerate(argv):
                if not oarg.found:
                     for name in oarg.names:
                          if arg == Oarg.clName(name):
@@ -93,15 +94,22 @@ def parse(argv=sys.argv):
                               mark = arg
                               break
                else:
-                    if arg is mark:
+                    if not deleted:
+                         oarg.str_vals = osplit(arg)
+                         print "opa:argv=",argv
+                         argv.remove(argv[i-1])
+                         argv.remove(arg)
+                         print "opa:argv=",argv
+                         deleted = True
+                         break
+                    else:
                          continue
-                    oarg.str_vals = osplit(arg)
-                    argv.remove(mark)
-                    argv.remove(arg)
-                    mark = None
-                    break
-               if mark is not None:
-                    argv.remove(mark)
+          if oarg.found and not deleted:
+               print "argv=",argv
+               print "mark=",arg
+               argv.remove(mark)
+               print "argv=",argv
+               deleted = True
           #appendind to list of pos_n_found if set
           if not oarg.found and oarg.pos_n_found > 0:
                pos_vec.append(oarg)
