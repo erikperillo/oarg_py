@@ -96,19 +96,14 @@ def parse(argv=sys.argv):
                else:
                     if not deleted:
                          oarg.str_vals = osplit(arg)
-                         print "opa:argv=",argv
                          argv.remove(argv[i-1])
                          argv.remove(arg)
-                         print "opa:argv=",argv
                          deleted = True
                          break
                     else:
                          continue
           if oarg.found and not deleted:
-               print "argv=",argv
-               print "mark=",arg
                argv.remove(mark)
-               print "argv=",argv
                deleted = True
           #appendind to list of pos_n_found if set
           if not oarg.found and oarg.pos_n_found > 0:
