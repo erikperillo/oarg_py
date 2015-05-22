@@ -30,9 +30,15 @@ class Oarg:
 
      def setTuple(self):
           if len(self.str_vals) == 0:
-               self.vals = (self.def_val,)
+               if self.tp == bool and self.found:
+                    self.vals = (not self.def_val,) 
+               else:
+                    self.vals = (self.def_val,)
                return
-          self.vals = tuple(self.tp(i) for i in self.str_vals)
+          if self.tp == bool:
+               self.vals = tuple( i in ["True","true","TRUE","y","yes","Y","Yes","YES","1"] for i in self.str_vals )
+          else:
+               self.vals = tuple(self.tp(i) for i in self.str_vals)
           
      @staticmethod
      def pureName(name):
@@ -81,6 +87,7 @@ def osplit(string,delim=","):
 
 def parse(argv=sys.argv):
      #list for oargs with pos_n_found
+     argv = list(argv) #TODO: remove
      pos_vec = []
      #main loop
      for oarg in Container.oargs:
@@ -95,9 +102,10 @@ def parse(argv=sys.argv):
                               break
                else:
                     if not deleted:
-                         oarg.str_vals = osplit(arg)
+                         if not (oarg.tp == bool and Oarg.isClName(arg)):
+                             oarg.str_vals = osplit(arg)
+                             argv.remove(arg)
                          argv.remove(argv[i-1])
-                         argv.remove(arg)
                          deleted = True
                          break
                     else:
