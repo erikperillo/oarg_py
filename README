@@ -1,0 +1,34 @@
+oarg - omni arguments parser
+
+oarg can parse multiple and positional args of any type. 
+
+Parsing
+You must specify keys(names) to represent your argument. For an integer value, for instance, it can be "-i" and "-integer". Note the dash at the beginning of the word. Every key MUST be preceded by a SINGLE dash.
+
+example:
+	./program.py -i 43
+
+You can also give multiple arguments at once:
+	./program.py -integer 23 1 232 3 -9
+
+They must be separated by a space.
+
+Positional arguments
+Positional arguments are those that do not come after a dashed name. In "./program.py this 'is example' -i 34", for instance, the positional arguments are "this" and "is example".
+
+Mixing things
+You can mix positional with normal, positional with positional etc. To explicitly separate things, use a comma (,).
+
+example:
+	./program.py this is an, "good example"
+
+In the arguments above, "this","is","an" will be considered three positional arguments for one thing and "good example" will be for other thing. You can also mix normal with positional just like:
+	./program.py -float 3.2 32.2 -0.32938, another,example man
+
+In the above, there will be two sets of positional arguments. To escape a comma (i.e. not use it as a separator), use "\,":
+	./program.py "i do not want it\, man"
+
+To use boolean values you can do:
+	./program.py -b , "positional arg"
+As well as:
+	./program.py -b -i 2 1 2
