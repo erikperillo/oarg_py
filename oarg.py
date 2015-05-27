@@ -1,8 +1,25 @@
+"""
+Copyright (c) 2015, Erik Perillo
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.
+
+3. Neither the name of the copyright holder nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+"""
+
 import sys
 import re
 
 class Oarg:
     invalid_options = []
+    oargs = []
+
     def __init__(self, tp, names, def_val, description, pos_n_found=-1):
         self.tp           = tp
         self.names        = [Oarg.pureName(n) for n in (names.split() if type(names) == str else names)]
@@ -12,7 +29,7 @@ class Oarg:
         self.found        = False
         self.str_vals     = []
         self.vals         = (def_val,)
-        Container.add(self)
+        Oarg.oargs.append(self)
 
     @property
     def val(self):
@@ -40,12 +57,6 @@ class Oarg:
     @staticmethod
     def isClName(name):
         return (name[0] == "-" and (ord(name[1]) < 48 or ord(name[1]) > 57)) if len(name) > 1 else False
-        
-class Container:
-    oargs = []
-    @staticmethod
-    def add(oarg):
-        Container.oargs.append(oarg)
 
 def parse(source=sys.argv,falses=["false","no","n","0"]):
     _src = list(source)[1:] #assuming first argument is program's name
@@ -54,12 +65,14 @@ def parse(source=sys.argv,falses=["false","no","n","0"]):
         _elem = re.sub(r'(?<!\\),',',,',elem)
         _src[i] = re.sub(r'\\,',',',_elem)
 
-    src = " " + ",".join(_src)
+    src = ",".join(_src)
     while src.find(",,,") >= 0:
         src = src.replace(",,,",",,")
-    src = re.split(r'[ ,]-(?![0-9])',src)
 
-    oargs_dict = dict( (Oarg.pureName(key),val) for val in Container.oargs for key in val.names )
+    src = re.split(r'[ ,]-(?![0-9])'," " + src)
+    src[0] = src[0][1:]
+
+    oargs_dict = dict( (Oarg.pureName(key),val) for val in Oarg.oargs for key in val.names )
 
     remaining = []
     for __cand in src:
@@ -85,7 +98,7 @@ def parse(source=sys.argv,falses=["false","no","n","0"]):
 
     remaining = [ i for i in remaining if i != "" ]
 
-    left_oargs = [ o for o in Container.oargs if not o.found and o.pos_n_found >= 0 ]
+    left_oargs = [ o for o in Oarg.oargs if not o.found and o.pos_n_found >= 0 ]
     if left_oargs != []: 
         left_oargs.sort(key=lambda x: x.pos_n_found)
 
@@ -97,14 +110,9 @@ def parse(source=sys.argv,falses=["false","no","n","0"]):
 
     return len(Oarg.invalid_options)
 
-
-def describeArgs(helpmsg=""):
+def describeArgs(helpmsg="",width=48):
     if helpmsg != "":
         print helpmsg
-    for oarg in Container.oargs:
-        names = ""
-        for i in range(len(oarg.names)-1):
-            names += Oarg.clName(oarg.names[i]) + ", "
-        names += Oarg.clName(oarg.names[len(oarg.names)-1])
-        print "{0:48}{1}".format(names,oarg.description)
-        #print names,"\t\t\t\t",oarg.description
+    for oarg in Oarg.oargs:
+        names = ",".join([ Oarg.clName(n) for n in oarg.names ])
+        print ("{0:" + str(width) + "}{1}").format(names,oarg.description)
