@@ -16,8 +16,17 @@ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND 
 import sys
 import re
 
+class UnknownOptionError(Exception):
+    def __init__(self,message,opt):
+        Exception.__init__(self,message)
+        self.opt = opt 
+
+class RepeatedKeyError(Exception):
+    def __init__(self,message,key):
+        Exception.__init__(self,message)
+        self.key = key 
+
 class Oarg:
-    invalid_options = []
     oargs = []
 
     def __init__(self, tp, names, def_val, description, pos_n_found=-1):
@@ -29,6 +38,12 @@ class Oarg:
         self.found        = False
         self.str_vals     = []
         self.vals         = (def_val,)
+
+        for name in self.names:
+            for oarg in Oarg.oargs:
+                if name in oarg.names:
+                    raise RepeatedKeyError("Key '" + Oarg.clName(name) + "' already exists",Oarg.clName(name))
+
         Oarg.oargs.append(self)
 
     @property
@@ -84,13 +99,11 @@ def parse(source=sys.argv,falses=["false","no","n","0"]):
         if ("-" + cands[0]) in sys.argv:
             opt = cands[0]
             args = cands[1:]
-            #print "\topt:",opt
-            #print "\targs:",args
             if opt in oargs_dict:
                 oarg = oargs_dict[opt]
                 oarg.setVals(args,falses)
             else:
-                Oarg.invalid_options.append(opt)
+                raise UnknownOptionError("Invalid option '" + Oarg.clName(opt) + "' passed",Oarg.clName(opt))
         else:
             remaining_partial = [_cand[0]] + remaining_partial
 
@@ -107,8 +120,6 @@ def parse(source=sys.argv,falses=["false","no","n","0"]):
         oarg.setVals(remaining[0].split(","),falses)
         remaining = remaining[1:]
         left_oargs = left_oargs[1:]
-
-    return len(Oarg.invalid_options)
 
 def describeArgs(helpmsg="",width=48):
     if helpmsg != "":
