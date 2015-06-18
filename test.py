@@ -8,7 +8,6 @@ ti = Oarg(int,"-i --int-val",-2,"Integer value",2)
 tf = Oarg(float,"-f --float-val",3.1415,"Float value",1)
 ts = Oarg(str,"-----s str -string-val:::::::::::","default","String value",4)
 tb = Oarg(bool,"-b --bool-val",False,"Boolean value")
-a = Oarg(float,"-a ---bool-val",4.3,"float value")
 hlp = Oarg(bool,"-h --help",False,"This help message")
 
 parse()

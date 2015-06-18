@@ -1,5 +1,5 @@
 """
-Copyright (c) 2015, Erik Perillo
+cOPYRIGHT (C) 2015, Erik Perillo
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
@@ -16,10 +16,10 @@ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND 
 import sys
 import re
 
-class UnknownOptionError(Exception):
-    def __init__(self,message,opt):
+class UnknownOptionsError(Exception):
+    def __init__(self,message,opts):
         Exception.__init__(self,message)
-        self.opt = opt 
+        self.opts = opts 
 
 class RepeatedKeyError(Exception):
     def __init__(self,message,key):
@@ -74,11 +74,11 @@ class Oarg:
         return (name[0] == "-" and (ord(name[1]) < 48 or ord(name[1]) > 57)) if len(name) > 1 else False
 
 def parse(source=sys.argv,falses=["false","no","n","0"]):
+    invalid_options = []
+
     _src = list(source)[1:] #assuming first argument is program's name
-    
     for i,elem in enumerate(_src):
         _elem = re.sub(r'(?<!\\),',',,',elem)
-        _src[i] = re.sub(r'\\,',',',_elem)
 
     src = ",".join(_src)
     while src.find(",,,") >= 0:
@@ -94,16 +94,16 @@ def parse(source=sys.argv,falses=["false","no","n","0"]):
         _cand = __cand.split(",,")
         cand = _cand[0]
         remaining_partial = _cand[1:]
-        cands = cand.split(",")
+        cands = re.split(r'(?<!\\),',cand)
 
         if ("-" + cands[0]) in sys.argv:
             opt = cands[0]
-            args = cands[1:]
+            args = [ re.sub(r'\\,',',',sentence) for sentence in cands[1:] ]
             if opt in oargs_dict:
                 oarg = oargs_dict[opt]
                 oarg.setVals(args,falses)
             else:
-                raise UnknownOptionError("Invalid option '" + Oarg.clName(opt) + "' passed",Oarg.clName(opt))
+                invalid_options.append(Oarg.clName(opt))
         else:
             remaining_partial = [_cand[0]] + remaining_partial
 
@@ -120,6 +120,9 @@ def parse(source=sys.argv,falses=["false","no","n","0"]):
         oarg.setVals(remaining[0].split(","),falses)
         remaining = remaining[1:]
         left_oargs = left_oargs[1:]
+
+    if len(invalid_options) > 0:
+        raise UnknownOptionsError("Invalid options passed: " + ",".join(invalid_options),invalid_options)
 
 def describeArgs(helpmsg="",width=48):
     if helpmsg != "":
