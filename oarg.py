@@ -1,132 +1,243 @@
 """
-cOPYRIGHT (C) 2015, Erik Perillo
+COPYRIGHT (C) 2015, Erik Perillo
 All rights reserved.
 
-Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
+Redistribution and use in source and binary forms, with or without modification, are permitted 
+provided that the following conditions are met:
 
-1. Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
+1. Redistributions of source code must retain the above copyright notice, this list of conditions 
+and the following disclaimer.
 
-2. Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.
+2. Redistributions in binary form must reproduce the above copyright notice, this list of 
+conditions and the following disclaimer in the documentation and/or other materials provided 
+with the distribution.
 
-3. Neither the name of the copyright holder nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.
+3. Neither the name of the copyright holder nor the names of its contributors may be used 
+to endorse or promote products derived from this software without specific prior written permission.
 
-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS 
+OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY 
+AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR 
+CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL 
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, 
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, 
+WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY 
+WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 """
 
 import sys
 import re
 
+class InvalidKeyNameFormat(Exception):
+    pass
+
+class InvalidOptionsPassed(Exception):
+    pass
+
 class UnknownOptionsError(Exception):
-    def __init__(self,message,opts):
-        Exception.__init__(self,message)
-        self.opts = opts 
+    pass
 
 class RepeatedKeyError(Exception):
-    def __init__(self,message,key):
-        Exception.__init__(self,message)
-        self.key = key 
+    pass
+
+def pureName(name):
+    while name.startswith("-"):
+        name = name.replace("-", "", 1)
+    return name
+
+def cmdLineKey(name):
+    return ("-" if len(name) <= 1 else "--") + name
+
+def isSingleDashCmdLineKey(name, digits="0123456789"):
+    return name.startswith("-") and not (any(name.startswith(d, 1) for d in digits) \
+                                         or name.startswith("-", 1))
+
+def isDoubleDashCmdLineKey(name):
+    return name.startswith("--")
+
+def isCmdLineArg(name, digits="0123456789"):
+    return isSingleDashCmdLineKey(name, digits) or isDoubleDashCmdLineKey(name)
+
+def condSplit(tgt_list, function):
+    cands = []
+    remaining = []
+    i = 0
+
+    while i < len(tgt_list):
+        if function(tgt_list[i]):
+            cand = [tgt_list[i]]
+            i += 1
+            while i < len(tgt_list) and not function(tgt_list[i]):
+                cand.append(tgt_list[i])
+                i += 1
+            cands.append(cand)
+        else:
+            remaining.append(tgt_list[i])
+            i += 1
+
+    return cands, remaining
+
+def tokenize(tgt_list, delim=","):
+    semi_tokens = (2*delim).join(tgt_list)
+
+    while 3*delim in semi_tokens:
+        semi_tokens = semi_tokens.replace(3*delim, delim)
+
+    #default string: r"(?<!\\)(?:\\\\)*(?<!,),(?!,)"
+    semi_tokens = re.split(r"(?<!\\)(?:\\\\)*(?<!" + delim + r")" + delim + 
+                           r"(?!" + delim + r")", semi_tokens) 
+
+    tokens = [[s.replace("\\" + delim, delim) for s in st.split(2*delim)] for st in semi_tokens]
+
+    return tokens 
 
 class Oarg:
     oargs = []
 
-    def __init__(self, tp, names, def_val, description, pos_n_found=-1):
+    def __init__(self, tp, keywords, def_val, description, pos_n_found=-1, single=True):
+        list_keywords = keywords.split() if isinstance(keywords, str) else keywords
+
+        #checking errors
+        for key in list_keywords:
+            if not isCmdLineArg(key):
+                raise InvalidKeyNameFormat(("invalid format for '%s': " % key) +
+                                            " must be of the form '-e' or '--example'")
+            if isSingleDashCmdLineKey(key) and len(key) > 2:
+                raise InvalidKeyNameFormat(("invalid format for key '%s': " % key) +
+                                            "only one letter allowed for single dash")
+            if isDoubleDashCmdLineKey(key) and len(key) <= 3:
+                raise InvalidKeyNameFormat(("invalid format for key '%s': " % key) +
+                                            "only two or more letters allowed for double dash")
+            if any(key in oarg.keywords for oarg in Oarg.oargs):
+                raise RepeatedKeyError("key '%s' already exists" % cmdLineKey(key))
+
+        #assigning attributes
         self.tp           = tp
-        self.names        = [Oarg.pureName(n) for n in (names.split() if type(names) == str else names)]
+        self.keywords        = [pureName(n) for n in list_keywords]
         self.def_val      = def_val
         self.description  = description
         self.pos_n_found  = pos_n_found
         self.found        = False
-        self.str_vals     = []
         self.vals         = (def_val,)
+        self.single       = single
 
-        for name in self.names:
-            for oarg in Oarg.oargs:
-                if name in oarg.names:
-                    raise RepeatedKeyError("Key '" + Oarg.clName(name) + "' already exists",Oarg.clName(name))
-
+        #putting in list
         Oarg.oargs.append(self)
 
     @property
     def val(self):
         return self.vals[0]    
 
-    def setVals(self,str_vals,falses):
-        self.str_vals = str_vals
-        self.found = True
-        if self.tp == bool:
-            self.vals = tuple( not i.lower() in falses for i in self.str_vals ) if self.str_vals != [] else (not self.def_val,)
+    def setVals(self, str_vals, falses):
+        if self.tp is bool:
+            self.vals = tuple(not val in falses for val in str_vals)
         else:
-            self.vals = tuple( self.tp(i) for i in self.str_vals ) if self.str_vals != [] else (self.def_val,)
-        
+            self.vals = tuple(self.tp(val) for val in str_vals)
+    
     @staticmethod
-    def pureName(name):
-        while name[0] == "-":
-            name = name[1:]
-        return name
+    def reset():
+        Oarg.oargs = []
+            
+def parse(source=sys.argv[1:], delim=",", falses=["false", "no", "n", "not", "0"]):
+    bool_oargs = [oarg for oarg in Oarg.oargs if oarg.tp is bool]
 
-    @staticmethod
-    def clName(name):
-        insertion = "-"
-        return insertion + name
+    candidates, remaining = condSplit(source, isCmdLineArg)
+    remaining_tokens = tokenize(remaining, delim)
+    
+    for candidate_block in candidates:
+        name, str_values = candidate_block[0], candidate_block[1:]
 
-    @staticmethod
-    def isClName(name):
-        return (name[0] == "-" and (ord(name[1]) < 48 or ord(name[1]) > 57)) if len(name) > 1 else False
+        #multiple boolean values
+        if isSingleDashCmdLineKey(name) and len(name) > 2:
+            for option in name.replace("-", "", 1):
+                try:
+                    oarg = filter(lambda oarg: option in oarg.keywords, bool_oargs)[0]
+                except IndexError:
+                    raise UnknownOptionsError("invalid option passed: '%s'" % cmdLineKey(option))
 
-def parse(source=sys.argv,falses=["false","no","n","0"]):
-    invalid_options = []
+                oarg.vals = (not oarg.def_val,)
+                oarg.found = True
+        else:
+            try:
+                oarg = filter(lambda oarg: pureName(name) in oarg.keywords, Oarg.oargs)[0]
+            except IndexError:
+                raise UnknownOptionsError("invalid option passed: '%s'" % name)
 
-    _src = list(source)[1:] #assuming first argument is program's name
-    for i,elem in enumerate(_src):
-        _elem = re.sub(r'(?<!\\),',',,',elem)
-
-    src = ",".join(_src)
-    while src.find(",,,") >= 0:
-        src = src.replace(",,,",",,")
-
-    src = re.split(r'[ ,]-(?![0-9])'," " + src)
-    src[0] = src[0][1:]
-
-    oargs_dict = dict( (Oarg.pureName(key),val) for val in Oarg.oargs for key in val.names )
-
-    remaining = []
-    for __cand in src:
-        _cand = __cand.split(",,")
-        cand = _cand[0]
-        remaining_partial = _cand[1:]
-        cands = re.split(r'(?<!\\),',cand)
-
-        if ("-" + cands[0]) in sys.argv:
-            opt = cands[0]
-            args = [ re.sub(r'\\,',',',sentence) for sentence in cands[1:] ]
-            if opt in oargs_dict:
-                oarg = oargs_dict[opt]
-                oarg.setVals(args,falses)
+            if not str_values:
+                if oarg.tp is bool:
+                    oarg.vals = (not oarg.def_val,)
+                else:
+                    raise InvalidOptionsPassed("no argument provided for '%s'" % name)
             else:
-                invalid_options.append(Oarg.clName(opt))
+                tokens = tokenize(str_values, delim)
+                
+                if oarg.single:
+                    values = [tokens[0][0]]
+                    remaining_tokens += [tokens[0][1:]] + tokens[1:]
+                else:
+                    values = tokens[0]
+                    remaining_tokens += tokens[1:]
+
+                oarg.setVals(values, falses)
+
+            oarg.found = True
+
+    _remaining_oargs = [oarg for oarg in Oarg.oargs if not oarg.found and oarg.pos_n_found >= 0]
+    remaining_oargs = sorted(_remaining_oargs, key=lambda o: o.pos_n_found)
+
+    #black magic begins here
+    for oarg in remaining_oargs:
+        remaining_tokens = filter(lambda tok: tok != [] and tok != [""], remaining_tokens)
+        if not remaining_tokens:
+            break
+
+        if oarg.single:
+            values = [remaining_tokens[0][0]]
+            remaining_tokens = [remaining_tokens[0][1:]] + remaining_tokens[1:]
         else:
-            remaining_partial = [_cand[0]] + remaining_partial
+            values = remaining_tokens[0]
+            remaining_tokens = remaining_tokens[1:]
 
-        remaining += remaining_partial
+        oarg.setVals(values, falses)
+        oarg.found = True
 
-    remaining = [ i for i in remaining if i != "" ]
+def describeArgs(helpmsg="", def_val=False, min_spacing=16):
+    max_width = max(sum(len(name) for name in oarg.keywords) + 2*(len(oarg.keywords)-1) \
+                    for oarg in Oarg.oargs)
 
-    left_oargs = [ o for o in Oarg.oargs if not o.found and o.pos_n_found >= 0 ]
-    if left_oargs != []: 
-        left_oargs.sort(key=lambda x: x.pos_n_found)
-
-    while len(remaining) > 0 and len(left_oargs) > 0:
-        oarg = left_oargs[0]    
-        oarg.setVals(remaining[0].split(","),falses)
-        remaining = remaining[1:]
-        left_oargs = left_oargs[1:]
-
-    if len(invalid_options) > 0:
-        raise UnknownOptionsError("Invalid options passed: " + ",".join(invalid_options),invalid_options)
-
-def describeArgs(helpmsg="",width=48):
-    if helpmsg != "":
+    if helpmsg:
         print helpmsg
+
     for oarg in Oarg.oargs:
-        names = ",".join([ Oarg.clName(n) for n in oarg.names ])
-        print ("{0:" + str(width) + "}{1}").format(names,oarg.description)
+        keywords = ", ".join([cmdLineKey(n) for n in oarg.keywords])
+        print ("{0:" + str(max_width + min_spacing) + "}{1}").format(keywords, 
+               oarg.description) + (" ({})".format(oarg.def_val) if def_val else "")
+
+if __name__ == "__main__":
+    ival = Oarg(int, "-i --intval", 34, "Integer value", 1, True)
+    ival2 = Oarg(int, "-j --intval2", 34, "Integer value", 10, True)
+    ival3 = Oarg(int, "-k --intval3", 34, "Integer value", 5, False)
+    fval = Oarg(float, "-f --floatval", -34.034, "Float value", 3, True)
+    fval2 = Oarg(float, "-g --floatval2", -3.034, "Float value", 0, False)
+    fval3 = Oarg(float, "-h --floatval3", 0.034, "Float value", 6, True)
+    sval = Oarg(str, "-s --strval", "ay lmao", "String value", 4, True)
+    sval2 = Oarg(str, "-t --strval2", "ay lmaojdfh", "String value", 9, False)
+    sval3 = Oarg(str, "-u --strval3", "ay lmaodfh", "String value", 8, False)
+    bval = Oarg(bool, "-b --boolval", False, "Boolean value", 2, False)
+    bval2 = Oarg(bool, "-c --boolval2", True, "Boolean value", 7, False)
+    bval3 = Oarg(bool, "-d --boolval3", False, "Boolean value", 8, True)
+    hlp = Oarg(bool, "-H --help", False, "This help message", 10)
+
+    parse()
+
+    if hlp.val:
+        describeArgs("Available args", True)
+        exit()
+
+    print "founds:"
+    for o in ival,ival2,ival3,fval,fval2,fval3,sval,sval2,sval3,bval,bval2,bval3:
+        if o.found:
+            print "keywords:", o.keywords, "vals:", o.vals
+            print "defval:", o.def_val, "val:", o.val
+            print
+    
