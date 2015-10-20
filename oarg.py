@@ -13,7 +13,8 @@ conditions and the following disclaimer in the documentation and/or other materi
 with the distribution.
 
 3. Neither the name of the copyright holder nor the names of its contributors may be used 
-to endorse or promote products derived from this software without specific prior written permission.
+to endorse or promote products derived from this software without 
+specific prior written permission.
 
 THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS 
 OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY 
@@ -34,8 +35,10 @@ class InvalidKeyNameFormat(Exception):
 class InvalidOptionsPassed(Exception):
     pass
 
-class UnknownOptionsError(Exception):
-    pass
+class UnknownKeyword(Exception):
+    def __init__(self, message, key):
+        super(UnknownKeyword, self).__init__(message)
+        self.key = pureName(key)
 
 class RepeatedKeyError(Exception):
     pass
@@ -91,10 +94,16 @@ def tokenize(tgt_list, delim=","):
 
     return tokens 
 
-class Oarg:
-    oargs = []
+oargs = []
+unknown_keys = []
 
-    def __init__(self, tp, keywords, def_val, description, pos_n_found=-1, single=True):
+def reset():
+    global oargs, unknown_keys
+    oargs = []
+    unknown_keys = []
+
+class Oarg:
+    def __init__(self, keywords, def_val, description, pos_n_found=-1, single=True):
         list_keywords = keywords.split() if isinstance(keywords, str) else keywords
 
         #checking errors
@@ -108,12 +117,12 @@ class Oarg:
             if isDoubleDashCmdLineKey(key) and len(key) <= 3:
                 raise InvalidKeyNameFormat(("invalid format for key '%s': " % key) +
                                             "only two or more letters allowed for double dash")
-            if any(key in oarg.keywords for oarg in Oarg.oargs):
+            if any(key in oarg.keywords for oarg in oargs):
                 raise RepeatedKeyError("key '%s' already exists" % cmdLineKey(key))
 
         #assigning attributes
-        self.tp           = tp
-        self.keywords        = [pureName(n) for n in list_keywords]
+        self.tp           = type(def_val)
+        self.keywords     = [pureName(n) for n in list_keywords]
         self.def_val      = def_val
         self.description  = description
         self.pos_n_found  = pos_n_found
@@ -122,7 +131,7 @@ class Oarg:
         self.single       = single
 
         #putting in list
-        Oarg.oargs.append(self)
+        oargs.append(self)
 
     @property
     def val(self):
@@ -134,12 +143,9 @@ class Oarg:
         else:
             self.vals = tuple(self.tp(val) for val in str_vals)
     
-    @staticmethod
-    def reset():
-        Oarg.oargs = []
-            
 def parse(source=sys.argv[1:], delim=",", falses=["false", "no", "n", "not", "0"]):
-    bool_oargs = [oarg for oarg in Oarg.oargs if oarg.tp is bool]
+    global unknown_keys
+    bool_oargs = [oarg for oarg in oargs if oarg.tp is bool]
 
     candidates, remaining = condSplit(source, isCmdLineArg)
     remaining_tokens = tokenize(remaining, delim)
@@ -153,15 +159,17 @@ def parse(source=sys.argv[1:], delim=",", falses=["false", "no", "n", "not", "0"
                 try:
                     oarg = filter(lambda oarg: option in oarg.keywords, bool_oargs)[0]
                 except IndexError:
-                    raise UnknownOptionsError("invalid option passed: '%s'" % cmdLineKey(option))
+                    unknown_keys.append(pureName(name))
+                    continue
 
                 oarg.vals = (not oarg.def_val,)
                 oarg.found = True
         else:
             try:
-                oarg = filter(lambda oarg: pureName(name) in oarg.keywords, Oarg.oargs)[0]
+                oarg = filter(lambda oarg: pureName(name) in oarg.keywords, oargs)[0]
             except IndexError:
-                raise UnknownOptionsError("invalid option passed: '%s'" % name)
+                unknown_keys.append(pureName(name))
+                continue
 
             if not str_values:
                 if oarg.tp is bool:
@@ -182,12 +190,12 @@ def parse(source=sys.argv[1:], delim=",", falses=["false", "no", "n", "not", "0"
 
             oarg.found = True
 
-    _remaining_oargs = [oarg for oarg in Oarg.oargs if not oarg.found and oarg.pos_n_found >= 0]
+    _remaining_oargs = [oarg for oarg in oargs if not oarg.found and oarg.pos_n_found >= 0]
     remaining_oargs = sorted(_remaining_oargs, key=lambda o: o.pos_n_found)
 
     #black magic begins here
     for oarg in remaining_oargs:
-        remaining_tokens = filter(lambda tok: tok != [] and tok != [""], remaining_tokens)
+        remaining_tokens = filter(lambda tok: tok and tok != [""], remaining_tokens)
         if not remaining_tokens:
             break
 
@@ -201,14 +209,18 @@ def parse(source=sys.argv[1:], delim=",", falses=["false", "no", "n", "not", "0"
         oarg.setVals(values, falses)
         oarg.found = True
 
+    if unknown_keys:
+        key = unknown_keys[0]
+        raise UnknownKeyword("unknown key '%s' passed" % cmdLineKey(key), pureName(key))
+
 def describeArgs(helpmsg="", def_val=False, min_spacing=16):
     max_width = max(sum(len(name) for name in oarg.keywords) + 2*(len(oarg.keywords)-1) \
-                    for oarg in Oarg.oargs)
+                    for oarg in oargs)
 
     if helpmsg:
         print helpmsg
 
-    for oarg in Oarg.oargs:
+    for oarg in oargs:
         keywords = ", ".join([cmdLineKey(n) for n in oarg.keywords])
         print ("{0:" + str(max_width + min_spacing) + "}{1}").format(keywords, 
                oarg.description) + (" ({})".format(oarg.def_val) if def_val else "")

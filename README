@@ -4,8 +4,6 @@ oarg - omni arguments parser
 	arg = Oarg(tp, keywords, def_val, description, pos_n_found=-1, single=True)
 
 	arguments description:
-	-tp: 
-			type of the argument to be parsed. (e.g. int, str, bool...)
 	-keywords: 
 			either a list of keywords (strings) or a single string with keywords separated by space.
 	-def_val: 
