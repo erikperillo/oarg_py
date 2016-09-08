@@ -178,8 +178,8 @@ def parse(source=sys.argv[1:], delim=",",
                 oarg.found = True
         else:
             try:
-                oarg = filter(lambda oarg: pure_name(name) in oarg.keywords, 
-                              oargs)[0]
+                oarg = list(filter(lambda oarg: pure_name(name) in \
+                            oarg.keywords, oargs))[0]
             except IndexError:
                 unknown_keys.append(pure_name(name))
                 continue
@@ -210,8 +210,8 @@ def parse(source=sys.argv[1:], delim=",",
 
     #black magic begins here
     for oarg in remaining_oargs:
-        remaining_tokens = filter(lambda tok: tok and tok != [""], 
-                                  remaining_tokens)
+        remaining_tokens = list(filter(lambda tok: tok and tok != [""], 
+                                  remaining_tokens))
         if not remaining_tokens:
             break
 
@@ -235,18 +235,18 @@ def describe_args(helpmsg="", def_val=False, min_spacing=16):
                 2*(len(oarg.keywords)-1) for oarg in oargs)
 
     if helpmsg:
-        print helpmsg
+        print(helpmsg)
 
     for oarg in oargs:
         keywords = ", ".join([cmd_line_key(n) for n in oarg.keywords])
-        print ("{0:" + str(max_width + min_spacing) + "}{1}").format(keywords,
+        print(("{0:" + str(max_width + min_spacing) + "}{1}").format(keywords,
                oarg.description) + (" ({})".format(oarg.def_val) \
-                                   if def_val else "")
+                                   if def_val else ""))
 
 #legacy reasons
 describeArgs = describe_args
 
-if __name__ == "__main__":
+def main():
     ival = Oarg("-i --intval", 34, "Integer value", 1, True)
     ival2 = Oarg("-j --intval2", 34, "Integer value", 10, True)
     ival3 = Oarg("-k --intval3", 34, "Integer value", 5, False)
@@ -267,11 +267,13 @@ if __name__ == "__main__":
         describe_args("Available args", True)
         exit()
 
-    print "founds:"
+    print("founds:")
     for o in ival, ival2, ival3, fval, fval2, fval3, sval, \
              sval2, sval3, bval, bval2, bval3:
         if o.found:
-            print "keywords:", o.keywords, "vals:", o.vals
-            print "defval:", o.def_val, "val:", o.val
-            print
+            print("keywords:", o.keywords, "vals:", o.vals)
+            print("defval:", o.def_val, "val:", o.val)
+            print("")
     
+if __name__ == "__main__":
+    main()
